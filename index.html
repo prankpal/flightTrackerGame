@@ -1,0 +1,1162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#0a0a0f" />
+  <title>PlaneSpotter</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --surface: #12121a;
+      --border: #1e1e2e;
+      --amber: #f5a623;
+      --amber-dim: #7a5212;
+      --green: #39d98a;
+      --red: #ff5f5f;
+      --text: #e8e8f0;
+      --muted: #5a5a72;
+      --radar-green: #00ff88;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Syne', sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Grain overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 999;
+      opacity: 0.4;
+    }
+
+    .app {
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 0 0 80px 0;
+    }
+
+    /* Header */
+    header {
+      padding: 32px 24px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo {
+      font-size: 28px;
+      line-height: 1;
+    }
+
+    .header-text h1 {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      color: var(--amber);
+    }
+
+    .header-text p {
+      font-family: 'Space Mono', monospace;
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: 0.05em;
+      margin-top: 2px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      margin-left: auto;
+      transition: background 0.3s;
+    }
+    .status-dot.active { background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse 2s infinite; }
+    .status-dot.error { background: var(--red); }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* Radar section */
+    .radar-section {
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .radar-wrap {
+      position: relative;
+      width: 220px;
+      height: 220px;
+    }
+
+    .radar-canvas {
+      width: 100%;
+      height: 100%;
+    }
+
+    .radar-center-label {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-family: 'Space Mono', monospace;
+      font-size: 9px;
+      color: var(--radar-green);
+      opacity: 0.7;
+      text-align: center;
+      pointer-events: none;
+    }
+
+    /* Setup card */
+    .card {
+      margin: 0 24px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+    }
+
+    .card-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+
+    .phone-input-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .phone-input {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      color: var(--text);
+      font-family: 'Space Mono', monospace;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .phone-input:focus {
+      border-color: var(--amber);
+    }
+
+    .phone-input::placeholder {
+      color: var(--muted);
+    }
+
+    .btn {
+      background: var(--amber);
+      color: #000;
+      border: none;
+      border-radius: 8px;
+      padding: 12px 20px;
+      font-family: 'Syne', sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+      white-space: nowrap;
+    }
+
+    .btn:active { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn.secondary {
+      background: transparent;
+      color: var(--amber);
+      border: 1px solid var(--amber-dim);
+    }
+
+    .btn.full { width: 100%; }
+    .btn.danger { background: var(--red); }
+
+    /* Status bar */
+    .status-bar {
+      margin: 0 24px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-bar-text {
+      font-family: 'Space Mono', monospace;
+      font-size: 10px;
+      color: var(--muted);
+      flex: 1;
+    }
+
+    .status-bar-text span { color: var(--text); }
+    .last-poll { font-family: 'Space Mono', monospace; font-size: 9px; color: var(--muted); }
+
+    /* Alert card */
+    .alert-card {
+      margin: 0 24px 16px;
+      background: #0e1a0f;
+      border: 1px solid #1a4020;
+      border-radius: 12px;
+      padding: 20px;
+      animation: slideIn 0.4s ease;
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .alert-card.hidden { display: none; }
+
+    .alert-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .alert-icon { font-size: 28px; }
+
+    .alert-callsign {
+      font-family: 'Space Mono', monospace;
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--green);
+      letter-spacing: 0.05em;
+    }
+
+    .alert-airline {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .flight-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .stat {
+      background: rgba(0,0,0,0.3);
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+
+    .stat-label {
+      font-family: 'Space Mono', monospace;
+      font-size: 9px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 4px;
+    }
+
+    .stat-value {
+      font-family: 'Space Mono', monospace;
+      font-size: 15px;
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    /* Game section */
+    .game-section {
+      border-top: 1px solid #1a4020;
+      padding-top: 14px;
+      margin-top: 4px;
+    }
+
+    .game-prompt {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--amber);
+      margin-bottom: 12px;
+    }
+
+    .guess-options {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .guess-input {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: var(--text);
+      font-family: 'Space Mono', monospace;
+      font-size: 13px;
+      outline: none;
+      width: 100%;
+    }
+    .guess-input:focus { border-color: var(--amber); }
+
+    .reveal-btn {
+      background: transparent;
+      border: 1px dashed var(--amber-dim);
+      border-radius: 8px;
+      padding: 10px;
+      color: var(--amber);
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      cursor: pointer;
+      width: 100%;
+      transition: all 0.2s;
+    }
+    .reveal-btn:hover { background: rgba(245,166,35,0.08); border-style: solid; }
+
+    .reveal-links {
+      display: flex;
+      gap: 8px;
+    }
+
+    .link-btn {
+      flex: 1;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      color: var(--text);
+      font-family: 'Space Mono', monospace;
+      font-size: 10px;
+      cursor: pointer;
+      text-decoration: none;
+      text-align: center;
+      display: block;
+      transition: border-color 0.2s;
+    }
+    .link-btn:hover { border-color: var(--amber); }
+
+    /* History */
+    .history-section {
+      margin: 0 24px;
+    }
+
+    .history-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    .history-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .history-callsign {
+      font-family: 'Space Mono', monospace;
+      font-size: 13px;
+      color: var(--green);
+      width: 80px;
+      flex-shrink: 0;
+    }
+
+    .history-meta {
+      flex: 1;
+    }
+
+    .history-airline {
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .history-time {
+      font-family: 'Space Mono', monospace;
+      font-size: 9px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 32px 0;
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.8;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 20px;
+      font-family: 'Space Mono', monospace;
+      font-size: 12px;
+      color: var(--text);
+      transition: transform 0.3s ease;
+      z-index: 100;
+      max-width: 320px;
+      text-align: center;
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+    .toast.success { border-color: var(--green); color: var(--green); }
+    .toast.error { border-color: var(--red); color: var(--red); }
+
+    /* Sections toggle */
+    .section { display: none; }
+    .section.active { display: block; }
+
+    /* Nav */
+    .bottom-nav {
+      position: fixed;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100%;
+      max-width: 480px;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      display: flex;
+      z-index: 10;
+    }
+
+    .nav-btn {
+      flex: 1;
+      background: none;
+      border: none;
+      padding: 14px 8px 10px;
+      color: var(--muted);
+      font-family: 'Syne', sans-serif;
+      font-size: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: color 0.2s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .nav-btn.active { color: var(--amber); }
+    .nav-icon { font-size: 18px; }
+
+    .choice-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      color: var(--text);
+      font-family: 'Space Mono', monospace;
+      font-size: 12px;
+      cursor: pointer;
+      width: 100%;
+      text-align: left;
+      transition: all 0.15s;
+    }
+    .choice-btn:active { transform: scale(0.98); }
+    .choice-btn.selected {
+      border-color: var(--amber);
+      background: rgba(245,166,35,0.1);
+      color: var(--amber);
+    }
+    .reveal-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .outcome-row { display: flex; gap: 8px; margin-top: 10px; }
+    .outcome-btn {
+      flex: 1;
+      border: none;
+      border-radius: 8px;
+      padding: 10px;
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .outcome-btn.correct { background: var(--green); color: #000; }
+    .outcome-btn.wrong { background: var(--red); color: #fff; }
+
+    .outcome-badge {
+      text-align: center;
+      padding: 10px;
+      font-family: 'Space Mono', monospace;
+      font-size: 12px;
+      border-radius: 8px;
+      margin-top: 10px;
+    }
+    .outcome-badge.correct { background: rgba(57,217,138,0.15); color: var(--green); }
+    .outcome-badge.wrong { background: rgba(255,95,95,0.15); color: var(--red); }
+
+    .guess-result {
+      font-family: 'Space Mono', monospace;
+      font-size: 9px;
+      color: var(--muted);
+      margin-top: 3px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="app">
+  <header>
+    <div class="logo">✈️</div>
+    <div class="header-text">
+      <h1>PlaneSpotter</h1>
+      <p>OVERHEAD FLIGHT TRACKER + GAME</p>
+    </div>
+    <div class="status-dot" id="statusDot"></div>
+  </header>
+
+  <!-- ── WATCH tab ── -->
+  <div class="section active" id="tab-watch">
+
+    <div class="radar-section">
+      <div class="radar-wrap">
+        <canvas class="radar-canvas" id="radarCanvas" width="220" height="220"></canvas>
+        <div class="radar-center-label">YOU<br>▼</div>
+      </div>
+    </div>
+
+    <div class="card" id="setupCard">
+      <div class="card-title">📍 Set Your Location</div>
+      <div class="phone-input-row">
+        <input class="phone-input" type="tel" id="phoneInput" placeholder="+1 555 000 0000" />
+        <button class="btn" id="locateBtn" onclick="registerLocation()">Locate Me</button>
+      </div>
+      <p style="font-family: 'Space Mono', monospace; font-size: 10px; color: var(--muted); margin-top: 10px; line-height: 1.6;">
+        Enter your phone number to receive SMS alerts.<br>
+        Your browser will ask for location permission.
+      </p>
+    </div>
+
+    <div class="status-bar" id="statusBar" style="display:none">
+      <div class="status-dot active"></div>
+      <div class="status-bar-text">
+        Watching from <span id="locLabel">—</span>
+        <div class="last-poll">Last checked: <span id="lastPollLabel">—</span></div>
+      </div>
+      <button class="btn secondary" style="padding: 6px 12px; font-size: 11px;" onclick="manualPoll()">Check Now</button>
+    </div>
+
+    <div class="alert-card hidden" id="alertCard">
+      <!-- filled dynamically -->
+    </div>
+
+    <div id="noFlightsMsg" style="display:none" class="empty-state">
+      ✈ No planes directly overhead right now<br>
+      <span style="font-size: 9px;">Checking every 60 seconds</span>
+    </div>
+
+  </div>
+
+  <!-- ── HISTORY tab ── -->
+  <div class="section" id="tab-history">
+    <div style="padding: 24px 24px 12px;">
+      <div class="card-title">🕐 Alert History</div>
+    </div>
+    <div class="history-section">
+      <div id="historyList">
+        <div class="empty-state">No alerts yet.<br>Once a plane is detected, it'll appear here.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SETTINGS tab ── -->
+  <div class="section" id="tab-settings">
+    <div style="padding: 24px;">
+      <div class="card-title" style="margin-bottom: 16px;">⚙️ Configuration</div>
+
+      <div class="card" style="margin: 0 0 16px;">
+        <div class="card-title">Server</div>
+        <div style="font-family: 'Space Mono', monospace; font-size: 11px; color: var(--muted); line-height: 1.8;" id="serverConfigDisplay">
+          Loading...
+        </div>
+      </div>
+
+      <div class="card" style="margin: 0 0 16px;">
+        <div class="card-title">Test SMS</div>
+        <p style="font-family: 'Space Mono', monospace; font-size: 10px; color: var(--muted); margin-bottom: 12px; line-height: 1.6;">
+          Manually trigger a poll to test if the API + Twilio are working.
+        </p>
+        <button class="btn full" onclick="manualPoll()">Trigger Manual Poll</button>
+      </div>
+
+      <div class="card" style="margin: 0;">
+        <div class="card-title">How It Works</div>
+        <div style="font-family: 'Space Mono', monospace; font-size: 10px; color: var(--muted); line-height: 2;">
+          1. Share your location once<br>
+          2. Server polls OpenSky every 60s<br>
+          3. Plane detected? → SMS sent<br>
+          4. Guess origin/destination<br>
+          5. Reveal with FlightAware link<br>
+          <br>
+          <span style="color: var(--amber);">Data: OpenSky Network (free)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Bottom Nav -->
+<nav class="bottom-nav">
+  <button class="nav-btn active" id="nav-watch" onclick="switchTab('watch')">
+    <span class="nav-icon">📡</span>Watch
+  </button>
+  <button class="nav-btn" id="nav-history" onclick="switchTab('history')">
+    <span class="nav-icon">🕐</span>History
+  </button>
+  <button class="nav-btn" id="nav-settings" onclick="switchTab('settings')">
+    <span class="nav-icon">⚙️</span>Settings
+  </button>
+</nav>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────
+let currentFlights = [];
+let alertHistory = [];
+let isWatching = false;
+let pollTimer = null;
+let gameState = {};      // icao24 -> { choices, selectedChoice, revealed, outcome, airline }
+let searchRadiusKm = 15;
+
+// ── Tab switching ─────────────────────────────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(`tab-${tab}`).classList.add('active');
+  document.getElementById(`nav-${tab}`).classList.add('active');
+  if (tab === 'history') renderHistory();
+  if (tab === 'settings') loadSettings();
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────
+function showToast(msg, type = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast ${type} show`;
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ── Radar animation ───────────────────────────────────────────────────────
+const canvas = document.getElementById('radarCanvas');
+const ctx = canvas.getContext('2d');
+let radarAngle = 0;
+let planeBlips = []; // [{x, y, age}]
+
+function drawRadar() {
+  const W = canvas.width, H = canvas.height;
+  const cx = W / 2, cy = H / 2;
+  const maxR = W / 2 - 4;
+
+  ctx.clearRect(0, 0, W, H);
+
+  // Background
+  ctx.fillStyle = '#050d07';
+  ctx.beginPath();
+  ctx.arc(cx, cy, maxR, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Rings
+  for (let i = 1; i <= 3; i++) {
+    ctx.strokeStyle = 'rgba(0,255,136,0.12)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(cx, cy, (maxR / 3) * i, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // Crosshairs
+  ctx.strokeStyle = 'rgba(0,255,136,0.08)';
+  ctx.beginPath();
+  ctx.moveTo(cx - maxR, cy); ctx.lineTo(cx + maxR, cy);
+  ctx.moveTo(cx, cy - maxR); ctx.lineTo(cx, cy + maxR);
+  ctx.stroke();
+
+  // Sweep gradient
+  const sweep = ctx.createConicalGradient
+    ? null // not standard; use workaround
+    : null;
+
+  // Draw sweep as a filled arc
+  const sweepLen = Math.PI / 3;
+  const grad = ctx.createLinearGradient(
+    cx + Math.cos(radarAngle) * maxR / 2,
+    cy + Math.sin(radarAngle) * maxR / 2,
+    cx, cy
+  );
+  grad.addColorStop(0, 'rgba(0,255,136,0.0)');
+  grad.addColorStop(1, 'rgba(0,255,136,0.18)');
+
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.arc(cx, cy, maxR, radarAngle - sweepLen, radarAngle);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Sweep line
+  ctx.strokeStyle = 'rgba(0,255,136,0.9)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx + Math.cos(radarAngle) * maxR, cy + Math.sin(radarAngle) * maxR);
+  ctx.stroke();
+
+  // Plane blips
+  for (const blip of planeBlips) {
+    const alpha = Math.max(0, 1 - blip.age / 120);
+    ctx.fillStyle = `rgba(0,255,136,${alpha})`;
+    ctx.beginPath();
+    ctx.arc(blip.x, blip.y, 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Glow
+    ctx.fillStyle = `rgba(0,255,136,${alpha * 0.3})`;
+    ctx.beginPath();
+    ctx.arc(blip.x, blip.y, 7, 0, Math.PI * 2);
+    ctx.fill();
+
+    blip.age++;
+  }
+
+  // Center dot
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+  ctx.fill();
+
+  radarAngle += 0.025;
+  requestAnimationFrame(drawRadar);
+}
+
+drawRadar();
+
+function addBlipsForFlights(flights) {
+  const W = canvas.width, H = canvas.height;
+  const cx = W / 2, cy = H / 2;
+  const maxR = W / 2 - 20;
+  const radius = searchRadiusKm;
+
+  planeBlips = flights.map(f => {
+    // Normalize distance
+    const normDist = Math.min(f.distanceKm / radius, 1) * maxR;
+    // Angle from heading (approximate — use static position relative to center)
+    // Since we don't have bearing to plane, place randomly but consistently by icao
+    const hash = f.icao24.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+    const angle = (hash % 360) * Math.PI / 180;
+    return {
+      x: cx + Math.cos(angle) * normDist,
+      y: cy + Math.sin(angle) * normDist,
+      age: 0,
+    };
+  });
+}
+
+// ── Location & registration ───────────────────────────────────────────────
+async function registerLocation() {
+  const btn = document.getElementById('locateBtn');
+  const phone = document.getElementById('phoneInput').value.trim();
+
+  btn.disabled = true;
+  btn.textContent = 'Getting GPS...';
+
+  if (!navigator.geolocation) {
+    showToast('Geolocation not supported by this browser', 'error');
+    btn.disabled = false;
+    btn.textContent = 'Locate Me';
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      const { latitude: lat, longitude: lon } = pos.coords;
+      btn.textContent = 'Registering...';
+
+      try {
+        const res = await fetch('/api/location', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lat, lon, phone: phone || undefined }),
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+          showToast('✅ Watching for planes!', 'success');
+          document.getElementById('setupCard').style.display = 'none';
+          document.getElementById('statusBar').style.display = 'flex';
+          document.getElementById('statusDot').className = 'status-dot active';
+          document.getElementById('locLabel').textContent =
+            `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+          isWatching = true;
+          startPolling();
+        } else {
+          showToast(data.error || 'Server error', 'error');
+        }
+      } catch (err) {
+        showToast('Cannot reach server. Is it running?', 'error');
+      }
+
+      btn.disabled = false;
+      btn.textContent = 'Locate Me';
+    },
+    (err) => {
+      showToast('Location denied: ' + err.message, 'error');
+      btn.disabled = false;
+      btn.textContent = 'Locate Me';
+    },
+    { enableHighAccuracy: false, timeout: 10000 }
+  );
+}
+
+// ── Polling status from server ────────────────────────────────────────────
+async function fetchStatus() {
+  try {
+    const res = await fetch('/api/status');
+    const data = await res.json();
+
+    if (data.location) {
+      document.getElementById('setupCard').style.display = 'none';
+      document.getElementById('statusBar').style.display = 'flex';
+      document.getElementById('statusDot').className = 'status-dot active';
+      document.getElementById('locLabel').textContent =
+        `${data.location.lat.toFixed(4)}, ${data.location.lon.toFixed(4)}`;
+      isWatching = true;
+    }
+
+    if (data.lastPollAt) {
+      const ago = Math.round((Date.now() - new Date(data.lastPollAt)) / 1000);
+      document.getElementById('lastPollLabel').textContent =
+        ago < 60 ? `${ago}s ago` : `${Math.round(ago/60)}m ago`;
+    }
+
+    currentFlights = data.currentFlights || [];
+    alertHistory = data.recentAlerts || [];
+    if (data.config) searchRadiusKm = data.config.searchRadiusKm || searchRadiusKm;
+
+    renderFlights(currentFlights);
+    if (currentFlights.length > 0) addBlipsForFlights(currentFlights);
+
+  } catch (err) {
+    console.warn('Status fetch failed:', err.message);
+  }
+}
+
+function startPolling() {
+  fetchStatus();
+  if (!pollTimer) {
+    pollTimer = setInterval(fetchStatus, 30000); // UI refresh every 30s
+  }
+}
+
+async function manualPoll() {
+  showToast('Checking for flights...', '');
+  try {
+    const res = await fetch('/api/poll', { method: 'POST' });
+    const data = await res.json();
+    currentFlights = data.flights || [];
+    renderFlights(currentFlights);
+    showToast(`Found ${data.flightsFound} flight(s)`, data.flightsFound > 0 ? 'success' : '');
+    if (currentFlights.length > 0) addBlipsForFlights(currentFlights);
+    await fetchStatus();
+  } catch (err) {
+    showToast('Server error: ' + err.message, 'error');
+  }
+}
+
+// ── Render flights ────────────────────────────────────────────────────────
+function renderFlights(flights) {
+  const card = document.getElementById('alertCard');
+  const noMsg = document.getElementById('noFlightsMsg');
+
+  if (!isWatching) return;
+
+  if (flights.length === 0) {
+    card.classList.add('hidden');
+    noMsg.style.display = 'block';
+    return;
+  }
+
+  noMsg.style.display = 'none';
+  card.classList.remove('hidden');
+
+  const f = flights[0]; // Show closest/first
+
+  if (!gameState[f.icao24]) {
+    gameState[f.icao24] = { choices: generateChoices(f.heading), airline: f.airline };
+  }
+  const gs = gameState[f.icao24];
+  const hasSelected = !!gs.selectedChoice;
+
+  const choicesHtml = gs.choices.map(city => `
+    <button class="choice-btn ${gs.selectedChoice === city ? 'selected' : ''}"
+      data-icao="${f.icao24}" data-city="${city}"
+      onclick="selectChoice('${f.icao24}', '${city}')">
+      ${city}
+    </button>`).join('');
+
+  const revealLinksHtml = gs.revealed ? `
+    <div style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);margin-bottom:8px;margin-top:10px">Tap to reveal:</div>
+    <div class="reveal-links">
+      ${f.flightradarUrl ? `<a class="link-btn" href="${f.flightradarUrl}" target="_blank">FlightRadar24 ↗</a>` : ''}
+      ${f.flightawareUrl ? `<a class="link-btn" href="${f.flightawareUrl}" target="_blank">FlightAware ↗</a>` : ''}
+    </div>` : '';
+
+  const outcomeHtml = gs.outcome
+    ? `<div class="outcome-badge ${gs.outcome}">
+        ${gs.outcome === 'correct' ? '✓ Correct! Nice guess.' : '✗ Wrong this time!'}
+        <div style="font-size:10px;margin-top:4px;opacity:0.8">Guessed: ${gs.selectedChoice}</div>
+      </div>`
+    : gs.revealed
+    ? `<div class="outcome-row">
+        <button class="outcome-btn correct" onclick="logOutcome('${f.icao24}', '${f.callsign}', 'correct')">✓ I was right!</button>
+        <button class="outcome-btn wrong" onclick="logOutcome('${f.icao24}', '${f.callsign}', 'wrong')">✗ I was wrong</button>
+      </div>`
+    : '';
+
+  card.innerHTML = `
+    <div class="alert-header">
+      <div class="alert-icon">✈️</div>
+      <div>
+        <div class="alert-callsign">${f.callsign || 'UNKNOWN'}</div>
+        <div class="alert-airline">${f.airline}</div>
+      </div>
+      ${flights.length > 1 ? `<div style="margin-left:auto;font-family:'Space Mono',monospace;font-size:10px;color:var(--amber);">+${flights.length-1} more</div>` : ''}
+    </div>
+
+    <div class="flight-stats">
+      <div class="stat">
+        <div class="stat-label">Altitude</div>
+        <div class="stat-value">${f.altitudeFt ? f.altitudeFt.toLocaleString() + 'ft' : '—'}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Heading</div>
+        <div class="stat-value">${f.headingCompass || '—'} ${f.heading ? Math.round(f.heading) + '°' : ''}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Speed</div>
+        <div class="stat-value">${f.speedKnots ? f.speedKnots + ' kts' : '—'}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Distance</div>
+        <div class="stat-value">${f.distanceKm} km</div>
+      </div>
+    </div>
+
+    <div class="game-section">
+      <div class="game-prompt">🎮 Where is it flying to?</div>
+      <div class="guess-options">
+        ${choicesHtml}
+      </div>
+      <button class="reveal-btn" id="revealBtn-${f.icao24}"
+        ${!hasSelected || gs.revealed ? 'disabled' : ''}
+        onclick="revealFlight('${f.icao24}', '${f.callsign}', '${f.flightradarUrl}', '${f.flightawareUrl}')">
+        👁 ${hasSelected && !gs.revealed ? 'Reveal Answer' : hasSelected ? 'Revealed' : 'Pick a city first'}
+      </button>
+      <div id="revealLinks-${f.icao24}">${revealLinksHtml}</div>
+      <div id="outcomeRow-${f.icao24}">${outcomeHtml}</div>
+    </div>
+  `;
+}
+
+// ── Airport pool & guessing game ──────────────────────────────────────────
+const CITY_POOLS = {
+  N:  ['Seattle', 'Portland', 'Vancouver', 'Minneapolis', 'Chicago', 'Detroit', 'Toronto', 'Montreal'],
+  NE: ['Boston', 'New York', 'Philadelphia', 'Washington DC', 'Toronto', 'Montreal'],
+  E:  ['New York', 'Boston', 'Washington DC', 'Atlanta', 'Miami', 'London', 'Paris', 'Frankfurt'],
+  SE: ['Miami', 'Orlando', 'Atlanta', 'Charlotte', 'Cancun', 'Bogota'],
+  S:  ['Los Angeles', 'Phoenix', 'Las Vegas', 'Cancun', 'Mexico City', 'Guadalajara'],
+  SW: ['Los Angeles', 'San Diego', 'Phoenix', 'Honolulu', 'Mexico City', 'Cancun'],
+  W:  ['Los Angeles', 'San Francisco', 'Las Vegas', 'Denver', 'Tokyo', 'Seoul', 'Honolulu'],
+  NW: ['Seattle', 'Portland', 'Vancouver', 'San Francisco', 'Tokyo', 'Anchorage'],
+};
+const ALL_CITIES = [...new Set(Object.values(CITY_POOLS).flat())];
+
+function headingToDir(h) {
+  const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+  return dirs[Math.round((h || 0) / 45) % 8];
+}
+
+function arrayShuffle(arr) { return arr.slice().sort(() => Math.random() - 0.5); }
+
+function generateChoices(heading) {
+  const dir = headingToDir(heading);
+  const primary = CITY_POOLS[dir] || [];
+  const others = ALL_CITIES.filter(c => !primary.includes(c));
+  return arrayShuffle([...arrayShuffle(primary).slice(0, 2), ...arrayShuffle(others).slice(0, 2)]);
+}
+
+function selectChoice(icao24, city) {
+  if (!gameState[icao24]) gameState[icao24] = {};
+  gameState[icao24].selectedChoice = city;
+  document.querySelectorAll(`.choice-btn[data-icao="${icao24}"]`).forEach(btn => {
+    btn.classList.toggle('selected', btn.dataset.city === city);
+  });
+  const revealBtn = document.getElementById(`revealBtn-${icao24}`);
+  if (revealBtn) {
+    revealBtn.disabled = false;
+    revealBtn.textContent = '👁 Reveal Answer';
+  }
+}
+
+function revealFlight(icao24, callsign, fr24, fa) {
+  if (!gameState[icao24]) gameState[icao24] = {};
+  gameState[icao24].revealed = true;
+
+  const revealBtn = document.getElementById(`revealBtn-${icao24}`);
+  if (revealBtn) revealBtn.style.display = 'none';
+
+  const linksEl = document.getElementById(`revealLinks-${icao24}`);
+  if (linksEl) {
+    linksEl.innerHTML = `
+      <div style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);margin-bottom:8px;margin-top:10px">Tap to reveal:</div>
+      <div class="reveal-links">
+        ${fr24 && fr24 !== 'null' ? `<a class="link-btn" href="${fr24}" target="_blank">FlightRadar24 ↗</a>` : ''}
+        ${fa && fa !== 'null' ? `<a class="link-btn" href="${fa}" target="_blank">FlightAware ↗</a>` : ''}
+      </div>`;
+  }
+
+  const outcomeRow = document.getElementById(`outcomeRow-${icao24}`);
+  if (outcomeRow && !gameState[icao24].outcome) {
+    outcomeRow.innerHTML = `
+      <div class="outcome-row">
+        <button class="outcome-btn correct" onclick="logOutcome('${icao24}', '${callsign}', 'correct')">✓ I was right!</button>
+        <button class="outcome-btn wrong" onclick="logOutcome('${icao24}', '${callsign}', 'wrong')">✗ I was wrong</button>
+      </div>`;
+  }
+}
+
+function logOutcome(icao24, callsign, outcome) {
+  const gs = gameState[icao24] || {};
+  const guess = gs.selectedChoice || 'No guess';
+  const airline = gs.airline || '';
+
+  const history = JSON.parse(localStorage.getItem('psGuessHistory') || '[]');
+  history.unshift({ icao24, callsign, airline, guess, outcome, guessedAt: Date.now() });
+  localStorage.setItem('psGuessHistory', JSON.stringify(history.slice(0, 100)));
+
+  if (!gameState[icao24]) gameState[icao24] = {};
+  gameState[icao24].outcome = outcome;
+
+  const outcomeRow = document.getElementById(`outcomeRow-${icao24}`);
+  if (outcomeRow) {
+    outcomeRow.innerHTML = `
+      <div class="outcome-badge ${outcome}">
+        ${outcome === 'correct' ? '✓ Correct! Nice guess.' : '✗ Wrong this time!'}
+        <div style="font-size:10px;margin-top:4px;opacity:0.8">Guessed: ${guess}</div>
+      </div>`;
+  }
+
+  showToast(outcome === 'correct' ? '✓ Logged as correct!' : '✗ Logged as wrong', outcome === 'correct' ? 'success' : '');
+}
+
+// ── History ───────────────────────────────────────────────────────────────
+function renderHistory() {
+  const list = document.getElementById('historyList');
+  const guessHistory = JSON.parse(localStorage.getItem('psGuessHistory') || '[]');
+
+  if (alertHistory.length === 0 && guessHistory.length === 0) {
+    list.innerHTML = '<div class="empty-state">No alerts yet.<br>Once a plane is detected, it\'ll appear here.</div>';
+    return;
+  }
+
+  let html = '';
+
+  if (alertHistory.length > 0) {
+    html += alertHistory.map(a => {
+      const f = a.flight;
+      const time = new Date(a.alertedAt).toLocaleTimeString();
+      return `
+        <div class="history-item">
+          <div class="history-callsign">${f.callsign || 'UNK'}</div>
+          <div class="history-meta">
+            <div class="history-airline">${f.airline}</div>
+            <div class="history-time">${time} · ${f.altitudeFt ? f.altitudeFt.toLocaleString() + 'ft' : '?'} · ${f.headingCompass || '?'}</div>
+          </div>
+          <div style="font-family:'Space Mono',monospace;font-size:10px;color:${a.smsSent ? 'var(--green)' : 'var(--red)'}">
+            ${a.smsSent ? '📱 SMS' : '❌ SMS'}
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  if (guessHistory.length > 0) {
+    html += `<div class="card-title" style="margin:${alertHistory.length ? '20px' : '4px'} 0 12px">🎮 Game Results</div>`;
+    html += guessHistory.map(g => {
+      const isCorrect = g.outcome === 'correct';
+      const time = new Date(g.guessedAt).toLocaleTimeString();
+      return `
+        <div class="history-item">
+          <div class="history-callsign" style="color:${isCorrect ? 'var(--green)' : 'var(--red)'}">${isCorrect ? '✓' : '✗'}</div>
+          <div class="history-meta">
+            <div class="history-airline">${g.callsign} · ${g.airline}</div>
+            <div class="history-time">${time}</div>
+            <div class="guess-result">Guessed: ${g.guess}</div>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  list.innerHTML = html;
+}
+
+// ── Settings ──────────────────────────────────────────────────────────────
+async function loadSettings() {
+  try {
+    const res = await fetch('/api/status');
+    const data = await res.json();
+    const cfg = data.config || {};
+    const el = document.getElementById('serverConfigDisplay');
+    if (el) {
+      el.innerHTML = `
+        Poll interval: <span style="color:var(--text)">${cfg.pollIntervalS}s</span><br>
+        Max altitude: <span style="color:var(--text)">${cfg.maxAltitudeM}m (${Math.round(cfg.maxAltitudeM * 3.281).toLocaleString()}ft)</span><br>
+        Search radius: <span style="color:var(--text)">${cfg.searchRadiusKm}km</span><br>
+        Polls run: <span style="color:var(--text)">${data.pollCount}</span>
+      `;
+    }
+  } catch {}
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+startPolling();
+</script>
+</body>
+</html>
