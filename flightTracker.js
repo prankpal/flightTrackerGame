@@ -144,7 +144,7 @@ async function getFlightsOverhead(lat, lon, radiusKm, maxAltitudeMeters) {
     .filter(s => {
       const planeLat = s[6];
       const planeLon = s[5];
-      const altitude = s[7]; // barometric altitude in meters
+      const altitude = s[7] ?? s[13]; // baro_altitude, fallback to geo_altitude
       const onGround = s[8];
 
       if (onGround) return false;
@@ -158,7 +158,7 @@ async function getFlightsOverhead(lat, lon, radiusKm, maxAltitudeMeters) {
       const planeLat = s[6];
       const planeLon = s[5];
       const callsign = (s[1] || '').trim();
-      const altitudeM = s[7];
+      const altitudeM = s[7] ?? s[13];
       const altitudeFt = altitudeM ? Math.round(altitudeM * 3.281) : null;
       const speedMs = s[9];
       const speedKnots = speedMs ? Math.round(speedMs * 1.944) : null;
